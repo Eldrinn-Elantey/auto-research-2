@@ -1,5 +1,27 @@
 local flib_dictionary = require("__flib__.dictionary")
 
+-- string.lower only maps ASCII, so a technology named in Cyrillic or with accented letters would
+-- only be found when the search text is typed in the same case as the name itself. Both alphabets
+-- sit in two byte UTF-8 sequences with a fixed offset between the cases, so a lookup table is
+-- enough. Alphabets outside these two, Greek for instance, are still matched case sensitively.
+local utf8_lower = {}
+for byte = 0x90, 0x9F do -- А-П
+    utf8_lower[string.char(0xD0, byte)] = string.char(0xD0, byte + 0x20)
+end
+for byte = 0xA0, 0xAF do -- Р-Я
+    utf8_lower[string.char(0xD0, byte)] = string.char(0xD1, byte - 0x20)
+end
+utf8_lower[string.char(0xD0, 0x81)] = string.char(0xD1, 0x91) -- Ё
+for byte = 0x80, 0x9E do -- À-Þ, excluding the multiplication sign at 0x97
+    if byte ~= 0x97 then
+        utf8_lower[string.char(0xC3, byte)] = string.char(0xC3, byte + 0x20)
+    end
+end
+
+function searchLower(text)
+    return (string.gsub(string.lower(text), "[\208\195][\129\128-\175]", utf8_lower))
+end
+
 function getConfig(force, config_changed)
     if not storage.auto_research_config then
         storage.auto_research_config = {}
@@ -611,7 +633,7 @@ gui = {
         local ingredients_filter = player.gui.top.auto_research_gui.flow.searchflow.auto_research_ingredients_filter_search_results.state
         local config = getConfig(player.force)
         local shown = 0
-        text = string.lower(text)
+        text = searchLower(text)
         -- NOTICE: localised name matching is available for technologies only, see buildTechDictionary
         local translatednames = flib_dictionary.get(player.index, "technology") or {}
         local techs = {}
@@ -627,10 +649,10 @@ gui = {
             local name = namedTech[1]
             local tech = namedTech[2]
             local showtech = false
-            if string.find(string.lower(name), text, 1, true) then
+            if string.find(searchLower(name), text, 1, true) then
                 -- show techs that match by name
                 showtech = true
-            elseif translatednames[name] and string.find(string.lower(translatednames[name]), text, 1, true) then
+            elseif translatednames[name] and string.find(searchLower(translatednames[name]), text, 1, true) then
                 -- show techs that match by localised name
                 showtech = true
             else
