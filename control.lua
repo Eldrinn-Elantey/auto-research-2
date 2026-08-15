@@ -1,3 +1,4 @@
+local flib_dictionary = require("__flib__.dictionary")
 
 function getConfig(force, config_changed)
     if not storage.auto_research_config then
@@ -286,6 +287,15 @@ function onResearchFinished(event)
 end
 
 -- user interface
+-- Localised technology names can only be compared as plain text once the game has translated them,
+-- which happens asynchronously. flib does the requesting, batching and caching per language.
+function buildTechDictionary()
+    flib_dictionary.new("technology")
+    for name, tech in pairs(prototypes.technology) do
+        flib_dictionary.add("technology", name, tech.localised_name)
+    end
+end
+
 gui = {
     toggleGui = function(player)
         if player.gui.top.auto_research_gui then
@@ -596,7 +606,8 @@ gui = {
         local config = getConfig(player.force)
         local shown = 0
         text = string.lower(text)
-        -- NOTICE: localised name matching does not work at present, pending unlikely changes to Factorio API
+        -- NOTICE: localised name matching is available for technologies only, see requestTechTranslations
+        local translatednames = flib_dictionary.get(player.index, "technology") or {}
         local techs = {}
         for name, tech in pairs(player.force.technologies) do
             table.insert(techs, {name, tech})
@@ -610,9 +621,9 @@ gui = {
                 if string.find(string.lower(name), text, 1, true) then
                     -- show techs that match by name
                     showtech = true
-                -- elseif string.find(string.lower(game.technology_prototypes[name].localised_name), text, 1, true) then
-                --     -- show techs that match by localised name
-                --     showtech = true
+                elseif translatednames[name] and string.find(string.lower(translatednames[name]), text, 1, true) then
+                    -- show techs that match by localised name
+                    showtech = true
                 else
                     for _, effect in pairs(tech.prototype.effects) do
                         if string.find(effect.type, text, 1, true) then
@@ -713,11 +724,21 @@ gui = {
 }
 
 -- event hooks
+script.on_init(function()
+    flib_dictionary.on_init()
+    buildTechDictionary()
+end)
 script.on_configuration_changed(function()
     for _, force in pairs(game.forces) do
         getConfig(force, true) -- triggers initialization of force config
     end
+    -- added or removed mods change the set of technologies, so the dictionary is rebuilt
+    flib_dictionary.on_configuration_changed()
+    buildTechDictionary()
 end)
+-- on_tick, on_string_translated, on_player_joined_game and on_player_locale_changed, none of which
+-- this mod handles itself
+flib_dictionary.handle_events()
 script.on_event(defines.events.on_player_created, function(event)
     local force = game.players[event.player_index].force
     local config = getConfig(force) -- triggers initialization of force config

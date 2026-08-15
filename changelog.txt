@@ -1,4 +1,9 @@
 ---------------------------------------------------------------------------------------------------
 Version: 0.0.0
   Changes:
+    - Search now matches technologies by their translated name, not only by the internal one
+---------------------------------------------------------------------------------------------------
+Version: 1.0.0
+Date: 2026-08-15
+  Changes:
     - Based on some-autoresearch 2.1.1 by Someone, originally Auto Research by canidae
