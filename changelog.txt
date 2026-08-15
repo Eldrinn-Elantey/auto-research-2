@@ -2,6 +2,7 @@
 Version: 0.0.0
   Changes:
     - Search now matches technologies by their translated name, not only by the internal one
+    - Typing in the search box is around nine times faster and no longer lags behind
 ---------------------------------------------------------------------------------------------------
 Version: 1.0.0
 Date: 2026-08-15
