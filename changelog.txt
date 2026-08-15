@@ -1,6 +1,4 @@
 ---------------------------------------------------------------------------------------------------
-Version: 1.0.0
-Date: 2026-08-15
-
-  Info:
-    - Based on some-autoresearch 2.1.1 by Someone, originally Auto Research by canidae.
+Version: 0.0.0
+  Changes:
+    - Based on some-autoresearch 2.1.1 by Someone, originally Auto Research by canidae

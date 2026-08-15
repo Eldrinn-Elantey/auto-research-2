@@ -9,7 +9,7 @@
 #*.[oa]
 #*.class
 #*.pyc
-#build/*
+build/
 
 ### Android development ###
 #local.properties
