@@ -46,8 +46,8 @@ function getConfig(force, config_changed)
         -- Allow switching research
         setAllowSwitching(force, true)
 
-        -- Print researched technology
-        setAnnounceCompletedResearch(force, true)
+        -- Print researched technology, off by default since the game announces it by itself on 2.0
+        setAnnounceCompletedResearch(force, false)
     end
 
     -- set research strategy
