@@ -1,15 +1,16 @@
-function getConfig(force, config_changed)
-    if not global.auto_research_config then
-        global.auto_research_config = {}
 
-        -- Disable Research Queue popup
-        if remote.interfaces.RQ and remote.interfaces.RQ["popup"] then
-            remote.call("RQ", "popup", false)
-        end
+function getConfig(force, config_changed)
+    if not storage.auto_research_config then
+        storage.auto_research_config = {}
     end
 
-    if not global.auto_research_config[force.name] then
-        global.auto_research_config[force.name] = {
+    -- Disable Research Queue popup
+    if remote.interfaces.RQ and remote.interfaces.RQ["popup"] then
+        remote.call("RQ", "popup", false)
+    end
+
+    if not storage.auto_research_config[force.name] then
+        storage.auto_research_config[force.name] = {
             prioritized_techs = {}, -- "prioritized" is "queued". kept for backwards compatability (because i'm lazy and don't want migration code)
             deprioritized_techs = {} -- "deprioritized" is "blacklisted". kept for backwards compatability (because i'm lazy and don't want migration code)
         }
@@ -27,27 +28,27 @@ function getConfig(force, config_changed)
     end
 
     -- set research strategy
-    global.auto_research_config[force.name].research_strategy = global.auto_research_config[force.name].research_strategy or "balanced"
+    storage.auto_research_config[force.name].research_strategy = storage.auto_research_config[force.name].research_strategy or "balanced"
 
-    if config_changed or not global.auto_research_config[force.name].allowed_ingredients or not global.auto_research_config[force.name].infinite_research then
+    if config_changed or not storage.auto_research_config[force.name].allowed_ingredients or not storage.auto_research_config[force.name].infinite_research then
         -- remember any old ingredients
         local old_ingredients = {}
-        if global.auto_research_config[force.name].allowed_ingredients then
-            for name, enabled in pairs(global.auto_research_config[force.name].allowed_ingredients) do
+        if storage.auto_research_config[force.name].allowed_ingredients then
+            for name, enabled in pairs(storage.auto_research_config[force.name].allowed_ingredients) do
                 old_ingredients[name] = enabled
             end
         end
         -- find all possible tech ingredients
         -- also scan for research that are infinite: techs that have no successor and tech.research_unit_count_formula is not nil
-        global.auto_research_config[force.name].allowed_ingredients = {}
-        global.auto_research_config[force.name].infinite_research = {}
+        storage.auto_research_config[force.name].allowed_ingredients = {}
+        storage.auto_research_config[force.name].infinite_research = {}
         local finite_research = {}
         for _, tech in pairs(force.technologies) do
             for _, ingredient in pairs(tech.research_unit_ingredients) do
-                global.auto_research_config[force.name].allowed_ingredients[ingredient.name] = (old_ingredients[ingredient.name] == nil or old_ingredients[ingredient.name])
+                storage.auto_research_config[force.name].allowed_ingredients[ingredient.name] = (old_ingredients[ingredient.name] == nil or old_ingredients[ingredient.name])
             end
             if tech.research_unit_count_formula then
-                global.auto_research_config[force.name].infinite_research[tech.name] = tech
+                storage.auto_research_config[force.name].infinite_research[tech.name] = tech
             end
             for _, pretech in pairs(tech.prerequisites) do
                 if pretech.enabled and not pretech.researched then
@@ -56,11 +57,11 @@ function getConfig(force, config_changed)
             end
         end
         for techname, _ in pairs(finite_research) do
-            global.auto_research_config[force.name].infinite_research[techname] = nil
+            storage.auto_research_config[force.name].infinite_research[techname] = nil
         end
     end
 
-    return global.auto_research_config[force.name]
+    return storage.auto_research_config[force.name]
 end
 
 function setAutoResearch(force, enabled)
@@ -69,7 +70,6 @@ function setAutoResearch(force, enabled)
     end
     local config = getConfig(force)
     config.enabled = enabled
-    force.research_queue_enabled = not enabled
 
     if enabled then
         -- start new research
@@ -130,13 +130,16 @@ function getPretechs(tech)
 end
 
 function canResearch(force, tech, config)
-    if not tech or tech.researched or not tech.enabled then
+    if not tech or tech.researched or not tech.enabled or tech.prototype.hidden then
         return false
     end
     for _, pretech in pairs(tech.prerequisites) do
         if not pretech.researched then
             return false
         end
+    end
+    if #tech.research_unit_ingredients == 0 then
+        return false
     end
     for _, ingredient in pairs(tech.research_unit_ingredients) do
         if not config.allowed_ingredients[ingredient.name] then
@@ -151,42 +154,53 @@ function canResearch(force, tech, config)
     return true
 end
 
+
+
+-- function for calculating tech effort
+function calcEffort(tech, config)
+    local ingredientCount = function(ingredients)
+        local tech_ingredients = 0
+        for _, ingredient in pairs(tech.research_unit_ingredients) do
+            tech_ingredients = tech_ingredients + ingredient.amount
+        end
+        return tech_ingredients
+    end
+    local effort = 0
+    if config.research_strategy == "fast" then
+        effort = math.max(tech.research_unit_energy, 1) * math.max(tech.research_unit_count, 1)
+    elseif config.research_strategy == "slow" then
+        effort = math.max(tech.research_unit_energy, 1) * math.max(tech.research_unit_count, 1) * -1
+    elseif config.research_strategy == "cheap" then
+        effort = math.max(ingredientCount(tech.research_unit_ingredients), 1) * math.max(tech.research_unit_count, 1)
+    elseif config.research_strategy == "expensive" then
+        effort = math.max(ingredientCount(tech.research_unit_ingredients), 1) * math.max(tech.research_unit_count, 1) * -1
+    elseif config.research_strategy == "balanced" then
+        effort = math.max(tech.research_unit_count, 1) * math.max(tech.research_unit_energy, 1) * math.max(ingredientCount(tech.research_unit_ingredients), 1)
+    else
+        effort = math.random(1, 999)
+    end
+    if (config.deprioritize_infinite_tech and config.infinite_research[tech.name]) then
+        return effort * (effort > 0 and 1000 or -1000)
+    else
+        return effort
+    end
+end
+
+function sortTechsByEffort(techs, config)
+    local compare = function(a, b)
+        return calcEffort(a[2], config) < calcEffort(b[2], config)
+    end
+    if config.research_strategy ~= "random" then
+        table.sort(techs, compare)
+    end
+end
+
 function startNextResearch(force, override_spam_detection)
     local config = getConfig(force)
     if not config.enabled or (force.current_research and not config.allow_switching) or (not override_spam_detection and config.last_research_finish_tick == game.tick) then
         return
     end
     config.last_research_finish_tick = game.tick -- if multiple research finish same tick for same force, the user probably enabled all techs
-
-    -- function for calculating tech effort
-    local calcEffort = function(tech)
-        local ingredientCount = function(ingredients)
-            local tech_ingredients = 0
-            for _, ingredient in pairs(tech.research_unit_ingredients) do
-                tech_ingredients = tech_ingredients + ingredient.amount
-            end
-            return tech_ingredients
-        end
-        local effort = 0
-        if config.research_strategy == "fast" then
-            effort = math.max(tech.research_unit_energy, 1) * math.max(tech.research_unit_count, 1)
-        elseif config.research_strategy == "slow" then
-            effort = math.max(tech.research_unit_energy, 1) * math.max(tech.research_unit_count, 1) * -1
-        elseif config.research_strategy == "cheap" then
-            effort = math.max(ingredientCount(tech.research_unit_ingredients), 1) * math.max(tech.research_unit_count, 1)
-        elseif config.research_strategy == "expensive" then
-            effort = math.max(ingredientCount(tech.research_unit_ingredients), 1) * math.max(tech.research_unit_count, 1) * -1
-        elseif config.research_strategy == "balanced" then
-            effort = math.max(tech.research_unit_count, 1) * math.max(tech.research_unit_energy, 1) * math.max(ingredientCount(tech.research_unit_ingredients), 1)
-        else
-            effort = math.random(1, 999)
-        end
-        if (config.deprioritize_infinite_tech and config.infinite_research[tech.name]) then
-            return effort * (effort > 0 and 1000 or -1000)
-        else
-            return effort
-        end
-    end
 
     -- see if there are some techs we should research first
     local next_research = nil
@@ -196,7 +210,7 @@ function startNextResearch(force, override_spam_detection)
         if tech and not next_research then
             local pretechs = getPretechs(tech)
             for _, pretech in pairs(pretechs) do
-                local effort = calcEffort(pretech)
+                local effort = calcEffort(pretech, config)
                 if (not least_effort or effort < least_effort) and canResearch(force, pretech, config) then
                     next_research = pretech.name
                     least_effort = effort
@@ -209,7 +223,7 @@ function startNextResearch(force, override_spam_detection)
     if not config.prioritized_only and not next_research then
         for techname, tech in pairs(force.technologies) do
             if tech.enabled and not tech.researched then
-                local effort = calcEffort(tech)
+                local effort = calcEffort(tech, config)
                 if (not least_effort or effort < least_effort) and canResearch(force, tech, config) then
                     next_research = techname
                     least_effort = effort
@@ -218,8 +232,24 @@ function startNextResearch(force, override_spam_detection)
         end
     end
 
+    -- keep queue, just put next_research at the start.
     if next_research then
-        force.add_research(next_research)
+        local rq = {}
+
+        -- manage last element of research queue
+        for i=1,7 do
+            if force.research_queue[i] == nil then break end
+            if i == (#force.research_queue) then
+                if not (force.current_research and config.allow_switching) then
+                    table.insert(rq, force.research_queue[i].name)
+                end
+            else
+                table.insert(rq, force.research_queue[i].name)
+            end
+        end
+        table.insert(rq, next_research)
+
+        force.research_queue = rq
     end
 end
 
@@ -295,25 +325,14 @@ gui = {
                 name = "research_strategies_outer",
                 direction = "horizontal"
             }
-            local research_strategies_left = research_strategies_outer.add{
-                type = "flow",
-                style = "auto_research_list_flow",
-                name = "research_strategies_left",
-                direction = "vertical"
-            }
-            research_strategies_left.add{type = "radiobutton", name = "auto_research_research_fast", caption = {"auto_research_gui.research_fast"}, tooltip = {"auto_research_gui.research_fast_tooltip"}, state = config.research_strategy == "fast"}
-            research_strategies_left.add{type = "radiobutton", name = "auto_research_research_cheap", caption = {"auto_research_gui.research_cheap"}, tooltip = {"auto_research_gui.research_cheap_tooltip"}, state = config.research_strategy == "cheap"}
-            research_strategies_left.add{type = "radiobutton", name = "auto_research_research_balanced", caption = {"auto_research_gui.research_balanced"}, tooltip = {"auto_research_gui.research_balanced_tooltip"}, state = config.research_strategy == "balanced"}
-            local research_strategies_right = research_strategies_outer.add{
-                type = "flow",
-                style = "auto_research_list_flow",
-                name = "research_strategies_right",
-                direction = "vertical"
-            }
-            research_strategies_right.style.left_padding = 15
-            research_strategies_right.add{type = "radiobutton", name = "auto_research_research_slow", caption = {"auto_research_gui.research_slow"}, tooltip = {"auto_research_gui.research_slow_tooltip"}, state = config.research_strategy == "slow"}
-            research_strategies_right.add{type = "radiobutton", name = "auto_research_research_expensive", caption = {"auto_research_gui.research_expensive"}, tooltip = {"auto_research_gui.research_expensive_tooltip"}, state = config.research_strategy == "expensive"}
-            research_strategies_right.add{type = "radiobutton", name = "auto_research_research_random", caption = {"auto_research_gui.research_random"}, tooltip = {"auto_research_gui.research_random_tooltip"}, state = config.research_strategy == "random"}
+            research_strategies_outer.add{type = "radiobutton", name = "auto_research_research_fast", caption = {"auto_research_gui.research_fast"}, tooltip = {"auto_research_gui.research_fast_tooltip"}, state = config.research_strategy == "fast"}
+            research_strategies_outer.add{type = "radiobutton", name = "auto_research_research_slow", caption = {"auto_research_gui.research_slow"}, tooltip = {"auto_research_gui.research_slow_tooltip"}, state = config.research_strategy == "slow"}
+            research_strategies_outer.add{type = "radiobutton", name = "auto_research_research_cheap", caption = {"auto_research_gui.research_cheap"}, tooltip = {"auto_research_gui.research_cheap_tooltip"}, state = config.research_strategy == "cheap"}
+            research_strategies_outer.add{type = "radiobutton", name = "auto_research_research_expensive", caption = {"auto_research_gui.research_expensive"}, tooltip = {"auto_research_gui.research_expensive_tooltip"}, state = config.research_strategy == "expensive"}
+            research_strategies_outer.add{type = "radiobutton", name = "auto_research_research_balanced", caption = {"auto_research_gui.research_balanced"}, tooltip = {"auto_research_gui.research_balanced_tooltip"}, state = config.research_strategy == "balanced"}
+            research_strategies_outer.add{type = "radiobutton", name = "auto_research_research_random", caption = {"auto_research_gui.research_random"}, tooltip = {"auto_research_gui.research_random_tooltip"}, state = config.research_strategy == "random"}
+
+            research_strategies_outer.style.horizontal_spacing = 6
 
             -- allowed ingredients
             frameflow.add{
@@ -344,6 +363,7 @@ gui = {
             prioritized.style.top_padding = 5
             prioritized.style.bottom_padding = 5
             prioritized.style.maximal_height = 127
+            prioritized.style.minimal_width = 440
             -- draw prioritized tech list
             gui.updateTechnologyList(player.gui.top.auto_research_gui.flow.prioritized, config.prioritized_techs, player, true)
 
@@ -362,6 +382,8 @@ gui = {
             deprioritized.style.top_padding = 5
             deprioritized.style.bottom_padding = 5
             deprioritized.style.maximal_height = 127
+            deprioritized.style.minimal_width = 440
+
             -- draw deprioritized tech list
             gui.updateTechnologyList(player.gui.top.auto_research_gui.flow.deprioritized, config.deprioritized_techs, player)
 
@@ -382,19 +404,16 @@ gui = {
                 name = "auto_research_search_text",
                 tooltip = {"auto_research_gui.search_tooltip"}
             }
-            local searchoptionsflow = frameflow.add{
-                type = "flow",
-                name = "searchoptionsflow",
-                style = "auto_research_tech_flow",
-                direction = "horizontal"
-            }
-            searchoptionsflow.add{
+            searchflow.add{
                 type = "checkbox",
                 name = "auto_research_ingredients_filter_search_results",
                 caption = {"auto_research_gui.ingredients_filter_search_results"},
                 tooltip = {"auto_research_gui.ingredients_filter_search_results_tooltip"},
                 state = config.filter_search_results or false
             }
+            searchflow.style.horizontal_spacing = 6
+            searchflow.style.vertical_align = "center"
+
             local search = frameflow.add{
                 type = "scroll-pane",
                 name = "search",
@@ -404,6 +423,8 @@ gui = {
             search.style.top_padding = 5
             search.style.bottom_padding = 5
             search.style.maximal_height = 127
+            search.style.minimal_width = 440
+
             -- draw search result list
             gui.updateSearchResult(player, "")
         end
@@ -442,12 +463,17 @@ gui = {
             end
         elseif string.find(name, "auto_research_research") then
             config.research_strategy = string.match(name, "^auto_research_research_(.*)$")
-            player.gui.top.auto_research_gui.flow.research_strategies_outer.research_strategies_left.auto_research_research_fast.state = (config.research_strategy == "fast")
-            player.gui.top.auto_research_gui.flow.research_strategies_outer.research_strategies_left.auto_research_research_cheap.state = (config.research_strategy == "cheap")
-            player.gui.top.auto_research_gui.flow.research_strategies_outer.research_strategies_left.auto_research_research_balanced.state = (config.research_strategy == "balanced")
-            player.gui.top.auto_research_gui.flow.research_strategies_outer.research_strategies_right.auto_research_research_slow.state = (config.research_strategy == "slow")
-            player.gui.top.auto_research_gui.flow.research_strategies_outer.research_strategies_right.auto_research_research_expensive.state = (config.research_strategy == "expensive")
-            player.gui.top.auto_research_gui.flow.research_strategies_outer.research_strategies_right.auto_research_research_random.state = (config.research_strategy == "random")
+            player.gui.top.auto_research_gui.flow.research_strategies_outer.auto_research_research_fast.state = (config.research_strategy == "fast")
+            player.gui.top.auto_research_gui.flow.research_strategies_outer.auto_research_research_cheap.state = (config.research_strategy == "cheap")
+            player.gui.top.auto_research_gui.flow.research_strategies_outer.auto_research_research_balanced.state = (config.research_strategy == "balanced")
+            player.gui.top.auto_research_gui.flow.research_strategies_outer.auto_research_research_slow.state = (config.research_strategy == "slow")
+            player.gui.top.auto_research_gui.flow.research_strategies_outer.auto_research_research_expensive.state = (config.research_strategy == "expensive")
+            player.gui.top.auto_research_gui.flow.research_strategies_outer.auto_research_research_random.state = (config.research_strategy == "random")
+
+            gui.updateTechnologyList(player.gui.top.auto_research_gui.flow.prioritized, config.prioritized_techs, player, true)
+            gui.updateTechnologyList(player.gui.top.auto_research_gui.flow.deprioritized, config.deprioritized_techs, player)
+            gui.updateSearchResult(player, player.gui.top.auto_research_gui.flow.searchflow.auto_research_search_text.text)
+
             -- start new research
             startNextResearch(force)
         else
@@ -455,7 +481,7 @@ gui = {
             if prefix == "allow_ingredient" then
                 config.allowed_ingredients[name] = not config.allowed_ingredients[name]
                 gui.updateAllowedIngredientsList(player.gui.top.auto_research_gui.flow.allowed_ingredients, player, config)
-                if player.gui.top.auto_research_gui.flow.searchoptionsflow.auto_research_ingredients_filter_search_results.state then
+                if player.gui.top.auto_research_gui.flow.searchflow.auto_research_ingredients_filter_search_results.state then
                     gui.updateSearchResult(player, player.gui.top.auto_research_gui.flow.searchflow.auto_research_search_text.text)
                 end
                 startNextResearch(force)
@@ -510,8 +536,8 @@ gui = {
                     direction = "horizontal"
                 }
             end
-            local sprite = "auto_research_tool_" .. ingredientname
-            if not player.gui.is_valid_sprite_path(sprite) then
+            local sprite = "auto_research_item_" .. ingredientname
+            if not helpers.is_valid_sprite_path(sprite) then
                 sprite = "auto_research_unknown"
             end
             ingredientflow.add{type = "sprite-button", style = "auto_research_sprite_button_toggle" .. (allowed and "_pressed" or ""), name = "auto_research_allow_ingredient-" .. ingredientname, tooltip = {"item-name." .. ingredientname}, sprite = sprite}
@@ -541,8 +567,8 @@ gui = {
                     entryflow.add{type = "sprite-button", style = "auto_research_sprite_button", name = "auto_research_delete-" .. techname, sprite = "auto_research_delete"}
                     entryflow.add{type = "label", style = "auto_research_tech_label", caption = tech.localised_name}
                     for _, ingredient in pairs(tech.research_unit_ingredients) do
-                        local sprite = "auto_research_tool_" .. ingredient.name
-                        if not player.gui.is_valid_sprite_path(sprite) then
+                        local sprite = "auto_research_item_" .. ingredient.name
+                        if not helpers.is_valid_sprite_path(sprite) then
                             sprite = "auto_research_unknown"
                         end
                         entryflow.add{type = "sprite", style = "auto_research_sprite", sprite = sprite}
@@ -566,13 +592,20 @@ gui = {
             name = "flow",
             direction = "vertical"
         }
-        local ingredients_filter = player.gui.top.auto_research_gui.flow.searchoptionsflow.auto_research_ingredients_filter_search_results.state
+        local ingredients_filter = player.gui.top.auto_research_gui.flow.searchflow.auto_research_ingredients_filter_search_results.state
         local config = getConfig(player.force)
         local shown = 0
         text = string.lower(text)
         -- NOTICE: localised name matching does not work at present, pending unlikely changes to Factorio API
+        local techs = {}
         for name, tech in pairs(player.force.technologies) do
-            if not tech.researched and tech.enabled then
+            table.insert(techs, {name, tech})
+        end
+        sortTechsByEffort(techs, config)
+        for _ , namedTech in pairs(techs) do
+            local name = namedTech[1]
+            local tech = namedTech[2]
+            if not tech.researched and tech.enabled and #tech.research_unit_ingredients > 0 then
                 local showtech = false
                 if string.find(string.lower(name), text, 1, true) then
                     -- show techs that match by name
@@ -581,7 +614,7 @@ gui = {
                 --     -- show techs that match by localised name
                 --     showtech = true
                 else
-                    for _, effect in pairs(tech.effects) do
+                    for _, effect in pairs(tech.prototype.effects) do
                         if string.find(effect.type, text, 1, true) then
                             -- show techs that match by effect type
                             showtech = true
@@ -593,7 +626,7 @@ gui = {
                             --     -- show techs that match by unlocked recipe localised name
                             --     showtech = true
                             else
-                                for _, product in pairs(game.recipe_prototypes[effect.recipe].products) do
+                                for _, product in pairs(prototypes.recipe[effect.recipe].products) do
                                     if string.find(product.name, text, 1, true) then
                                         -- show techs that match by unlocked recipe product name
                                         showtech = true
@@ -601,7 +634,7 @@ gui = {
                                     --     -- show techs that match by unlocked recipe product localised name
                                     --     showtech = true
                                     else
-                                        local prototype = game.item_prototypes[product.name]
+                                        local prototype = prototypes.item[product.name]
                                         if prototype then
                                             if prototype.place_result then
                                                 if string.find(prototype.place_result.name, text, 1, true) then
@@ -667,8 +700,8 @@ gui = {
                     entryflow.add{type = "sprite-button", style = "auto_research_sprite_button", name = "auto_research_blacklist-" .. name, sprite = "auto_research_deprioritize"}
                     entryflow.add{type = "label", style = "auto_research_tech_label", name = name, caption = tech.localised_name}
                     for _, ingredient in pairs(tech.research_unit_ingredients) do
-                        local sprite = "auto_research_tool_" .. ingredient.name
-                        if not player.gui.is_valid_sprite_path(sprite) then
+                        local sprite = "auto_research_item_" .. ingredient.name
+                        if not helpers.is_valid_sprite_path(sprite) then
                             sprite = "auto_research_unknown"
                         end
                         entryflow.add{type = "sprite", style = "auto_research_sprite", sprite = sprite}
