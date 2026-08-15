@@ -1,10 +1,6 @@
 data.raw["gui-style"].default["auto_research_header_label"] = {
     type = "label_style",
     font_color = {r = .91764705882352941176, g = .85098039215686274509, b = .67450980392156862745},
-    font = "default-large-semibold",
-    top_padding = 0,
-    bottom_padding = 0,
-    left_padding = 0,
     right_padding = 6
 }
 
@@ -90,7 +86,8 @@ data.raw["gui-style"].default["auto_research_sprite"] = {
     top_padding = 0,
     right_padding = 0,
     bottom_padding = 0,
-    left_padding = 0
+    left_padding = 0,
+    stretch_image_to_widget_size = true
 }
 
 data:extend({
@@ -105,7 +102,7 @@ data:extend({
     {
         type = "sprite",
         name = "auto_research_prioritize_top",
-        filename = "__auto-research__/graphics/prioritize_top.png",
+        filename = "__auto-research-2__/graphics/prioritize_top.png",
         priority = "extra-high-no-scale",
         width = 32,
         height = 32
@@ -113,7 +110,7 @@ data:extend({
     {
         type = "sprite",
         name = "auto_research_prioritize_bottom",
-        filename = "__auto-research__/graphics/prioritize_bottom.png",
+        filename = "__auto-research-2__/graphics/prioritize_bottom.png",
         priority = "extra-high-no-scale",
         width = 32,
         height = 32
@@ -121,7 +118,7 @@ data:extend({
     {
         type = "sprite",
         name = "auto_research_deprioritize",
-        filename = "__auto-research__/graphics/deprioritize.png",
+        filename = "__auto-research-2__/graphics/deprioritize.png",
         priority = "extra-high-no-scale",
         width = 32,
         height = 32
@@ -129,7 +126,7 @@ data:extend({
     {
         type = "sprite",
         name = "auto_research_delete",
-        filename = "__auto-research__/graphics/delete.png",
+        filename = "__auto-research-2__/graphics/delete.png",
         priority = "extra-high-no-scale",
         width = 32,
         height = 32
@@ -137,7 +134,7 @@ data:extend({
     {
         type = "sprite",
         name = "auto_research_unknown",
-        filename = "__auto-research__/graphics/questionmark.png",
+        filename = "__auto-research-2__/graphics/questionmark.png",
         priority = "extra-high-no-scale",
         width = 32,
         height = 32
