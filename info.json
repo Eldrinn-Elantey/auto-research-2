@@ -5,9 +5,9 @@
     "author": "Eldrinn Elantey (based on some-autoresearch by Someone, originally canidae)",
     "homepage": "https://github.com/Eldrinn-Elantey/auto-research",
     "description": "Automates research. Toggle GUI with Shift+T (customizable).",
-    "factorio_version": "2.1",
+    "factorio_version": "2.0",
     "dependencies": [
-        "base>=2.1.0",
+        "base>=2.0.0",
 
         "! auto-research",
         "! some-autoresearch",
