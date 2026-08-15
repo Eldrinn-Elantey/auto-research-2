@@ -1,15 +1,16 @@
 {
-    "name": "some-autoresearch",
-    "version": "2.1.1",
-    "title": "Auto Research (fixed + re-published)",
-    "author": "Someone (originally canidae)",
-    "homepage": "https://git.somenet.org/factorio/some-autoresearch.git",
+    "name": "auto-research-2",
+    "version": "1.0.0",
+    "title": "Auto Research 2",
+    "author": "Eldrinn Elantey (based on some-autoresearch by Someone, originally canidae)",
+    "homepage": "https://github.com/Eldrinn-Elantey/auto-research",
     "description": "Automates research. Toggle GUI with Shift+T (customizable).",
     "factorio_version": "2.1",
     "dependencies": [
         "base>=2.1.0",
 
         "! auto-research",
+        "! some-autoresearch",
         "! factorio-research-queue",
         "! sonaxaton-research-queue"
     ]
