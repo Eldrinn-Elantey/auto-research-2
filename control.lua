@@ -552,7 +552,7 @@ gui = {
                     direction = "horizontal"
                 }
             end
-            local sprite = "auto_research_tool_" .. ingredientname
+            local sprite = "item/" .. ingredientname
             if not helpers.is_valid_sprite_path(sprite) then
                 sprite = "auto_research_unknown"
             end
@@ -583,7 +583,7 @@ gui = {
                     entryflow.add{type = "sprite-button", style = "auto_research_sprite_button", name = "auto_research_delete-" .. techname, sprite = "auto_research_delete"}
                     entryflow.add{type = "label", style = "auto_research_tech_label", caption = tech.localised_name}
                     for _, ingredient in pairs(tech.research_unit_ingredients) do
-                        local sprite = "auto_research_tool_" .. ingredient.name
+                        local sprite = "item/" .. ingredient.name
                         if not helpers.is_valid_sprite_path(sprite) then
                             sprite = "auto_research_unknown"
                         end
@@ -720,7 +720,7 @@ gui = {
                 entryflow.add{type = "sprite-button", style = "auto_research_sprite_button", name = "auto_research_blacklist-" .. name, sprite = "auto_research_deprioritize"}
                 entryflow.add{type = "label", style = "auto_research_tech_label", name = name, caption = tech.localised_name}
                 for _, ingredient in pairs(tech.research_unit_ingredients) do
-                    local sprite = "auto_research_tool_" .. ingredient.name
+                    local sprite = "item/" .. ingredient.name
                     if not helpers.is_valid_sprite_path(sprite) then
                         sprite = "auto_research_unknown"
                     end
