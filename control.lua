@@ -45,9 +45,6 @@ function getConfig(force, config_changed)
 
         -- Allow switching research
         setAllowSwitching(force, true)
-
-        -- Print researched technology, off by default since the game announces it by itself on 2.0
-        setAnnounceCompletedResearch(force, false)
     end
 
     -- set research strategy
@@ -118,13 +115,6 @@ function setAllowSwitching(force, enabled)
 
     -- start new research
     startNextResearch(force)
-end
-
-function setAnnounceCompletedResearch(force, enabled)
-    if not force then
-        return
-    end
-    getConfig(force).announce_completed = enabled
 end
 
 function setDeprioritizeInfiniteTech(force, enabled)
@@ -298,19 +288,6 @@ function onResearchFinished(event)
             table.remove(config.deprioritized_techs, i)
         end
     end
-    -- announce completed research
-    if config.announce_completed and config.no_announce_this_tick ~= game.tick then
-        if config.last_research_finish_tick == game.tick then
-            config.no_announce_this_tick = game.tick
-        else
-            local level = ""
-            if event.research.research_unit_count_formula then
-                level = (event.research.researched and event.research.level) or (event.research.level - 1)
-            end
-            force.print{"auto_research.announce_completed", event.research.localised_name, level}
-        end
-    end
-
     startNextResearch(event.research.force)
 end
 
@@ -348,7 +325,6 @@ gui = {
             frameflow.add{type = "checkbox", name = "auto_research_enabled", caption = {"auto_research_gui.enabled"}, tooltip = {"auto_research_gui.enabled_tooltip"}, state = config.enabled or false}
             frameflow.add{type = "checkbox", name = "auto_research_queued_only", caption = {"auto_research_gui.prioritized_only"}, tooltip = {"auto_research_gui.prioritized_only_tooltip"}, state = config.prioritized_only or false}
             frameflow.add{type = "checkbox", name = "auto_research_allow_switching", caption = {"auto_research_gui.allow_switching"}, tooltip = {"auto_research_gui.allow_switching_tooltip"}, state = config.allow_switching or false}
-            frameflow.add{type = "checkbox", name = "auto_research_announce_completed", caption = {"auto_research_gui.announce_completed"}, tooltip = {"auto_research_gui.announce_completed_tooltip"}, state = config.announce_completed or false}
             frameflow.add{type = "checkbox", name = "auto_research_deprioritize_infinite_tech", caption = {"auto_research_gui.deprioritize_infinite_tech"}, tooltip = {"auto_research_gui.deprioritize_infinite_tech_tooltip"}, state = config.deprioritize_infinite_tech or false}
 
             -- research strategy
@@ -478,8 +454,6 @@ gui = {
             setQueuedOnly(force, event.element.state)
         elseif name == "auto_research_allow_switching" then
             setAllowSwitching(force, event.element.state)
-        elseif name == "auto_research_announce_completed" then
-            setAnnounceCompletedResearch(force, event.element.state)
         elseif name == "auto_research_deprioritize_infinite_tech" then
             setDeprioritizeInfiniteTech(force, event.element.state)
         elseif name == "auto_research_ingredients_filter_search_results" then
@@ -813,6 +787,7 @@ remote.add_interface("auto_research", {
     enabled = function(forcename, value) setAutoResearch(game.forces[forcename], value) end,
     queued_only = function(forcename, value) setQueuedOnly(game.forces[forcename], value) end,
     allow_switching = function(forcename, value) setAllowSwitching(game.forces[forcename], value) end,
-    announce_completed = function(forcename, value) setAnnounceCompletedResearch(game.forces[forcename], value) end,
+    -- kept as a no-op so that scenarios calling it do not fail with an unknown function error
+    announce_completed = function(forcename, value) end,
     deprioritize_infinite_tech = function(forcename, value) setDeprioritizeInfiniteTech(game.forces[forcename], value) end
 })

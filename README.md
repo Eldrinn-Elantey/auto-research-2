@@ -17,7 +17,6 @@ Pick a research strategy and the mod keeps starting new research on its own, so 
 - Optionally never touch infinite technologies until every finite one is done
 - Optionally research only what is queued and nothing else
 - Search technologies by their name in your own language, or by the internal names of the recipes and items they unlock
-- Announces completed research in the console
 - Default queued and blacklisted technologies as per-player settings
 - Settings are per force, so each team in multiplayer has its own
 
